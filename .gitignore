@@ -16,3 +16,9 @@ vendor/
 
 # goland
 .idea
+
+# settings
+*.json
+
+# mac os bullsh*t
+*.DS_Store
