@@ -2,55 +2,146 @@ package main
 
 import (
 	"context"
-	"github.com/CanobbioE/gf-metrics/client"
+	"flag"
+	"fmt"
+	"github.com/CanobbioE/gf-metrics/cfg"
+	"github.com/CanobbioE/gf-metrics/cmd/metrics"
 	"log"
+	"os"
+	"strconv"
+	"strings"
 	"time"
 )
 
 const (
-	GlofoxOrgOwner = "glofoxinc"
-	FromBranch     = "develop"
-	ToBranch       = "master"
+	tokenUsage     = `a GitHub token with repo permissions`
+	ownerUsage     = `the owner of all the repositories, usually an organisation`
+	configUsage    = `the path to a JSON file defining all or part of the options`
+	teamUsage      = `a space separated list of GitHub handlers`
+	timestampUsage = `the timestamp (in seconds) from which the metrics will start, defaults to one week ago`
+	helpUsage      = `print this helpful message`
 )
 
-func getPlatformSquadTeam() []string {
-	return []string{"CanobbioE", "cristianpontes", "Gjergj"}
+func getUsage() string {
+	s := `gf-metrics (BETA) is a tool that partially automates the job of retrieving a team metrics.
+
+	Usage:
+		gf-metrics [--token <token> --owner <repository owner> --team <team members>]  [--settings <path to JSON file>]
+
+	Options:
+		--token <token>:
+			%s
+		--owner <owner>:
+			%s
+		--config <path to  config>:
+			%s (see below)
+		--team <team members>:
+			%s
+		--timestamp <timestamp>:
+			%s
+		--help, -h:
+			%s
+
+	Example:
+		gf-metrics --config ./settings.json --token SecretToken123
+
+	Settings:
+		the JSON file can define one or more of the following fields:
+			- "token": string
+			- "team": array of string
+			- "owner": string
+			- "timestamp": string
+
+		Each required field left blank must be provided through the CLI flags.
+		Each value specified as a CLI flag will take priority over the configuration file.
+		You can find a configuration file example at https://github.com/CanobbioE/gf-metrics
+`
+	return fmt.Sprintf(s, tokenUsage, ownerUsage, configUsage, teamUsage, timestampUsage, helpUsage)
 }
 
 func main() {
+
 	ctx := context.Background()
-	oneWeekAgo := time.Now().Add(-7 * time.Hour * 24)
-	deployPerRepo := make(map[string]int)
+	oneWeekAgo := strconv.Itoa(int(time.Now().Add(-1 * 7 * 24 * time.Hour).Unix()))
 
-	c := client.NewWithOauth(ctx, "<access token>")
+	var githubOauthToken, repoOwner, cfgPath, teamMembers, startDateTimestamp string
+	var help bool
+	flag.StringVar(&githubOauthToken, "token", "", tokenUsage)
+	flag.StringVar(&repoOwner, "owner", "", ownerUsage)
+	flag.StringVar(&cfgPath, "config", "", configUsage)
+	flag.StringVar(&teamMembers, "team", "", teamUsage)
+	flag.StringVar(&startDateTimestamp, "timestamp", "", timestampUsage)
+	flag.BoolVar(&help, "help", false, helpUsage)
 
-	log.Printf("Fetching repos from %s\n", GlofoxOrgOwner)
-	repos, err := c.GetOrgRepos(ctx, GlofoxOrgOwner)
-	if err != nil {
-		panic(err)
+	flag.Usage = func() { fmt.Println(getUsage()) }
+
+	flag.Parse()
+
+	// handle help
+	if help {
+		flag.Usage()
+		os.Exit(0)
 	}
 
-	log.Printf("Repo fetched. Counting deploys to %v starting from %v...\n", ToBranch, oneWeekAgo)
-	for _, repo := range repos {
-		count, err := c.CountTeamDeploys(ctx, &client.CountTeamPROpts{
-			Team:                getPlatformSquadTeam(),
-			ToBranch:            ToBranch,
-			Repo:                repo,
-			Organisation:        GlofoxOrgOwner,
-			StartSearchFromDate: oneWeekAgo,
-		})
+	// handle team members
+	var team []string
+	if !empty(teamMembers) {
+		team = strings.Split(teamMembers, " ")
+	}
+
+	// handle config file
+	if !empty(cfgPath) {
+		config, err := cfg.FromFile(cfgPath)
 		if err != nil {
-			panic(err)
-		}
-		deployPerRepo[repo] = count
-	}
-
-	log.Println("Deploys per repo:")
-	for k, v := range deployPerRepo {
-		if v > 0 {
-			log.Printf("%s: %d\n", k, v)
+			log.Fatalf("couldn't read file %s: %v", cfgPath, err)
 		}
 
+		config.FillEmpty(&githubOauthToken, &repoOwner, &team, &startDateTimestamp)
 	}
 
+	// handle required
+	if (empty(githubOauthToken) || empty(repoOwner)) && empty(cfgPath) {
+		log.Fatalln("expected GitHub oauth token and repository owner or a settings file")
+	}
+
+	if empty(startDateTimestamp) {
+		startDateTimestamp = oneWeekAgo
+	}
+
+	t, err := strconv.ParseInt(startDateTimestamp, 10, 64)
+	if err != nil {
+		log.Fatalf("couldn't parse timestamp %v: %v", startDateTimestamp, err)
+	}
+
+	metricsCmd, err := metrics.New(ctx, repoOwner, githubOauthToken, team, time.Unix(t, 0))
+	if err != nil {
+		log.Fatalf("couldn't initialize the metrics command: %v", err)
+	}
+
+	metricsCmd.Run()
+
+	// lead time for changes: how long does it take to release changes to prod
+	/*
+		LTC(gopkg) = 29mins
+		LTC(automation) = 20mins
+		LTC(gf-app-infra) = 10mins
+		LTC(gf-cloudwatch-alarms) = 10mins
+		LTC(ts-monorepo) = 38mins
+		LTC(core) = 23mins
+	*/
+	// Example: We did 3 releases in the gopkg and 1 in the core, then we have ((3*29) + (1*23)) / 4 = 27mins
+
+	// Mean Time to Detection: (How long does it take us to find bugs)
+
+	// Time to restore service (How long does it take us to fix issues)
+
+	// Change Failure Rate (What percentage of this weeks deployments had issues):
+
+	// Unplanned Work
+
+	// Average WIP During Week:
+}
+
+func empty(s string) bool {
+	return s == ""
 }

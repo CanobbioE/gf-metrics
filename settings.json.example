@@ -1,0 +1,6 @@
+{
+  "token": "the github token with repo permissions",
+  "team": ["a list", "of GitHub", "handler names"],
+  "owner": "the organisation that owns all the repositories",
+  "timestamp": "a timestamp (in seconds) from which the metrics should start (default to 7 days ago)"
+}
