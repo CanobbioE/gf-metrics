@@ -104,6 +104,7 @@ func main() {
 		log.Fatalln("expected GitHub oauth token and repository owner or a settings file")
 	}
 
+	// handle timestamp
 	if empty(startDateTimestamp) {
 		startDateTimestamp = oneWeekAgo
 	}
@@ -113,33 +114,18 @@ func main() {
 		log.Fatalf("couldn't parse timestamp %v: %v", startDateTimestamp, err)
 	}
 
-	metricsCmd, err := metrics.New(ctx, repoOwner, githubOauthToken, team, time.Unix(t, 0))
+	metricsCmd, err := metrics.New(ctx, repoOwner, githubOauthToken)
 	if err != nil {
 		log.Fatalf("couldn't initialize the metrics command: %v", err)
 	}
 
-	metricsCmd.Run()
+	metricsCmd.Run(metrics.Args{DeploymentFrequency: &metrics.DeploymentFrequencyArgs{
+		Ctx:                ctx,
+		Owner:              repoOwner,
+		MetricStartingDate: time.Unix(t, 0),
+		Team:               team,
+	}})
 
-	// lead time for changes: how long does it take to release changes to prod
-	/*
-		LTC(gopkg) = 29mins
-		LTC(automation) = 20mins
-		LTC(gf-app-infra) = 10mins
-		LTC(gf-cloudwatch-alarms) = 10mins
-		LTC(ts-monorepo) = 38mins
-		LTC(core) = 23mins
-	*/
-	// Example: We did 3 releases in the gopkg and 1 in the core, then we have ((3*29) + (1*23)) / 4 = 27mins
-
-	// Mean Time to Detection: (How long does it take us to find bugs)
-
-	// Time to restore service (How long does it take us to fix issues)
-
-	// Change Failure Rate (What percentage of this weeks deployments had issues):
-
-	// Unplanned Work
-
-	// Average WIP During Week:
 }
 
 func empty(s string) bool {

@@ -30,7 +30,7 @@ func NewDeploymentFrequencyCmd(client *client.AuthClient) Command {
 	}
 }
 
-func (d *DeploymentFrequency) Run(args CommandArgs) {
+func (d *DeploymentFrequency) Run(args CommandArgs) CommandReturnValues {
 
 	log.Println("Calculating deployment frequency...")
 	a := args.(*DeploymentFrequencyArgs)
@@ -54,6 +54,8 @@ func (d *DeploymentFrequency) Run(args CommandArgs) {
 	}
 
 	printDeployFrequency(deployPerRepo)
+
+	return deployPerRepo
 }
 
 func printDeployFrequency(deployPerRepo map[string]int) {
