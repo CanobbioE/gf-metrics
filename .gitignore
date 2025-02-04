@@ -20,5 +20,5 @@ vendor/
 # settings
 *.json
 
-# mac os bullsh*t
+# mac os
 *.DS_Store
